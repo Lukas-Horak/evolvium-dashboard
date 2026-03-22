@@ -19,13 +19,14 @@ const OPTIMAL_TIMES = [
 
 const DAY_NAMES = ["Nedeľa", "Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota"];
 
-function getNextOptimalTime() {
+function getNextOptimalTime(skipSlots) {
+  skipSlots = skipSlots || 0;
   const now = new Date();
   const currentDay = now.getDay();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
 
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
     const dayIndex = (currentDay + dayOffset) % 7;
     const dayData = OPTIMAL_TIMES.find(d => d.day === DAY_NAMES[dayIndex]);
     if (!dayData) continue;
@@ -33,6 +34,7 @@ function getNextOptimalTime() {
     for (const time of dayData.times) {
       const [h, m] = time.split(":").map(Number);
       if (dayOffset === 0 && (h < currentHour || (h === currentHour && m <= currentMinute))) continue;
+      if (skipSlots > 0) { skipSlots--; continue; }
       const nextDate = new Date(now);
       nextDate.setDate(now.getDate() + dayOffset);
       nextDate.setHours(h, m, 0, 0);
