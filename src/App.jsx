@@ -45,9 +45,9 @@ function getNextOptimalTime() {
 // ── Status badge component ──
 function StatusBadge({ status }) {
   const config = {
-    draft: { bg: "bg-gray-700", text: "text-gray-300", label: "Koncept", dot: "bg-gray-400" },
-    scheduled: { bg: "bg-amber-900/40", text: "text-amber-300", label: "Naplánovaný", dot: "bg-amber-400" },
-    posted: { bg: "bg-emerald-900/40", text: "text-emerald-300", label: "Publikovaný", dot: "bg-emerald-400" },
+    draft: { bg: "bg-gray-700", text: "text-gray-300", label: "Draft", dot: "bg-gray-400" },
+    scheduled: { bg: "bg-amber-900/40", text: "text-amber-300", label: "Napl\u00E1novan\u00FD", dot: "bg-amber-400" },
+    posted: { bg: "bg-emerald-900/40", text: "text-emerald-300", label: "Publikovan\u00FD", dot: "bg-emerald-400" },
     failed: { bg: "bg-red-900/40", text: "text-red-300", label: "Chyba", dot: "bg-red-400" },
   };
   const c = config[status] || config.draft;
@@ -370,7 +370,7 @@ function StatsBar({ posts }) {
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {[
         { label: "Celkom", value: total, color: "text-white", bg: "bg-gray-800" },
-        { label: "Koncepty", value: drafted, color: "text-gray-400", bg: "bg-gray-800" },
+        { label: "Drafts", value: drafted, color: "text-gray-400", bg: "bg-gray-800" },
         { label: "Naplánované", value: scheduled, color: "text-amber-400", bg: "bg-amber-900/20" },
         { label: "Publikované", value: posted, color: "text-emerald-400", bg: "bg-emerald-900/20" },
       ].map(stat => (
@@ -383,7 +383,7 @@ function StatsBar({ posts }) {
   );
 }
 
-// ── Demo data matching your Google Sheet ──
+// ── Real content calendar data (Batch 3 — 13 grafických postov + 4 fotky knihy) ──
 const DEMO_POSTS = [
   {
     row: 2,
@@ -446,6 +446,62 @@ const DEMO_POSTS = [
     image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/7_hfwyzz.png",
     caption: `Kedy naposledy si urobil nie\u010Do, \u010Do \u0165a naozaj vydesilo \u2014 a pr\u00E1ve preto to bolo to najlep\u0161ie rozhodnutie?`,
     hashtags: "#evolvium #komfortnazona #rozhodnutia #rast #zivot",
+    status: "draft",
+  },
+  {
+    row: 11,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/8_pb3kwf.png",
+    caption: `\u201ETvoje telo je chr\u00E1m. Tvoja myse\u013E je z\u00E1hrada. To, \u010Do do nej zaseje\u0161, ur\u010D\u00ED, \u010Do z nej vyrastie.\u201C`,
+    hashtags: "#evolvium #telo #mysel #vedomyzivot #harmonia #sebalaska",
+    status: "draft",
+  },
+  {
+    row: 12,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/9_be5z95.png",
+    caption: `Ako \u010Dasto rob\u00ED\u0161 veci len preto, \u017Ee sa to od teba o\u010Dak\u00E1va \u2014 a nie preto, \u017Ee to naozaj chce\u0161?`,
+    hashtags: "#evolvium #autenticita #sloboda #rozhodnutia #vnutornycompas",
+    status: "draft",
+  },
+  {
+    row: 13,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/e_grayscale,c_fill,w_1080,h_1350,g_auto/4T0A6284_ujkmwh.jpg",
+    caption: `Otvoren\u00E1 kniha, otvoren\u00E1 myse\u013E.\nHory v pozad\u00ED pripom\u00EDnaj\u00FA, \u017Ee ka\u017Ed\u00FD v\u00FDstup za\u010D\u00EDna prv\u00FDm krokom.`,
+    hashtags: "#evolvium #kniha #hory #slovensko #priroda #cesta",
+    status: "draft",
+  },
+  {
+    row: 14,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/10_cq19lo.png",
+    caption: `\u201ENajv\u00E4\u010D\u0161ia odvaha nie je by\u0165 siln\u00FD. Je to dovoli\u0165 si by\u0165 zranite\u013En\u00FD.\u201C`,
+    hashtags: "#evolvium #odvaha #zranitelnost #sila #rast #vedomie",
+    status: "draft",
+  },
+  {
+    row: 15,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/11_k0mwrr.png",
+    caption: `\u010Co keby ti \u017Eivot ned\u00E1val prek\u00E1\u017Eky, ale pozv\u00E1nky na to, aby si sa stal silnej\u0161\u00EDm?`,
+    hashtags: "#evolvium #prekazky #vyzvy #silnejsi #perspektiva #zivot",
+    status: "draft",
+  },
+  {
+    row: 16,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/12_evlonm.png",
+    caption: `\u201ETi\u0161ina nie je pr\u00E1zdnota. Je to priestor, kde sa rod\u00ED pochopenie.\u201C`,
+    hashtags: "#evolvium #tisina #pokoj #meditacia #pochopenie #vnutornysvet",
+    status: "draft",
+  },
+  {
+    row: 17,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/e_grayscale,c_fill,w_1080,h_1350,g_auto/4T0A6346-2_f5zdx9.jpg",
+    caption: `Evol\u00FAcia vedomia \u2013 Ja\nKniha od Luk\u00E1\u0161a Hor\u00E1ka o ceste sp\u00E4\u0165 k sebe.\n\nwww.evolvium.com`,
+    hashtags: "#evolvium #kniha #evoluciavedomia #autor #slovensko",
+    status: "draft",
+  },
+  {
+    row: 18,
+    image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/13_kfr3a5.png",
+    caption: `\u201EKa\u017Ed\u00FD koniec je za\u010Diatok nie\u010Doho nov\u00E9ho. Ka\u017Ed\u00E9 zavretie dver\u00ED je pozvan\u00EDm otvori\u0165 \u010Fal\u0161ie.\u201C`,
+    hashtags: "#evolvium #novyzaciatok #zmena #nadej #cesta #vedomie",
     status: "draft",
   },
 ];
@@ -620,7 +676,7 @@ export default function EvolviumDashboard() {
               <Filter size={14} className="text-gray-500" />
               {[
                 { key: "all", label: "Všetky" },
-                { key: "draft", label: "Koncepty" },
+                { key: "draft", label: "Drafts" },
                 { key: "scheduled", label: "Naplánované" },
                 { key: "posted", label: "Publikované" },
               ].map(f => (
@@ -683,7 +739,7 @@ export default function EvolviumDashboard() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Batch</span>
-                  <span className="text-gray-200">Batch 3 (17 postov)</span>
+                  <span className="text-gray-200">Batch 3 (13 + 4 fotky)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Pipeline</span>
