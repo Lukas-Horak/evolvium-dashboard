@@ -1,5 +1,44 @@
 import { useState, useEffect, useRef } from "react";
-import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical, Plus, Sparkles, Loader2, Package } from "lucide-react";
+import { Calendar, CalendarDays, Clock, Send, Edit3, Check, X, Eye, Settings, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical, Plus, Sparkles, Loader2, Package } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+
+// ── Supabase client ──
+const SUPABASE_URL = "https://gqhkvwuicttwdfmxlowb.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxaGt2d3VpY3R0d2RmbXhsb3diIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMDY2OTYsImV4cCI6MjA4OTc4MjY5Nn0.JDqH9HuMoiYk5WKXT3ONUn9K4nLKFCGjdRB0oGDqg8k";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── Supabase helpers ──
+async function loadPostsFromSupabase() {
+  try {
+    const { data, error } = await supabase.from("posts").select("*").order("row_num", { ascending: true });
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+    return data.map(row => ({
+      row: row.row_num, image_url: row.image_url || "", caption: row.caption || "",
+      hashtags: row.hashtags || "", quote: row.quote || "", status: row.status || "draft",
+      posted_date: row.posted_date || "", scheduled_iso: row.scheduled_iso || null,
+      canva_status: row.canva_status || "",
+    }));
+  } catch (e) {
+    console.warn("Supabase load failed:", e.message);
+    return null;
+  }
+}
+
+async function saveAllPostsToSupabase(posts) {
+  try {
+    const rows = posts.map(p => ({
+      row_num: p.row, image_url: p.image_url || "", caption: p.caption || "",
+      hashtags: p.hashtags || "", quote: p.quote || "", status: p.status || "draft",
+      posted_date: p.posted_date || "", scheduled_iso: p.scheduled_iso || null,
+      canva_status: p.canva_status || "",
+    }));
+    const { error } = await supabase.from("posts").upsert(rows, { onConflict: "row_num" });
+    if (error) throw error;
+  } catch (e) {
+    console.warn("Supabase save failed:", e.message);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // EVOLVIUM Social Media Dashboard
@@ -124,6 +163,76 @@ function SettingsPanel({ config, onSave, onClose }) {
   );
 }
 
+// ── 5-Day Scheduler component ──
+function FiveDayScheduler({ post, scheduledTimes, onSchedule, onAutoPost }) {
+  const [selectedDay, setSelectedDay] = useState(null);
+  const taken = scheduledTimes || [];
+  const now = new Date();
+  const days = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(now); d.setDate(now.getDate() + i);
+    const dayIndex = d.getDay();
+    const dayData = OPTIMAL_TIMES.find(x => x.day === DAY_NAMES[dayIndex]);
+    const dateStr = d.toLocaleDateString("sk-SK", { day: "numeric", month: "short" });
+    const dayName = i === 0 ? "Dnes" : i === 1 ? "Zajtra" : DAY_NAMES[dayIndex];
+    const availableTimes = (dayData?.times || ["08:00", "12:00", "18:00"]).filter(t => {
+      const [h, m] = t.split(":").map(Number);
+      if (i === 0 && (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes()))) return false;
+      const checkDate = new Date(d); checkDate.setHours(h, m, 0, 0);
+      if (taken.includes(checkDate.toISOString())) return false;
+      return true;
+    });
+    days.push({ index: i, date: d, dateStr, dayName, dayData, availableTimes, score: dayData?.score || 75 });
+  }
+  const handleTimeClick = (day, time) => {
+    const schedDate = new Date(day.date);
+    const [h, m] = time.split(":").map(Number);
+    schedDate.setHours(h, m, 0, 0);
+    onSchedule({ date: schedDate, score: day.score, day: DAY_NAMES[day.date.getDay()], time });
+  };
+  return (
+    <div className="space-y-2">
+      <button onClick={onAutoPost} className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-medium rounded-lg transition-all shadow-lg shadow-emerald-600/20">
+        <Zap size={12} /> Auto-post v najlepsom case
+      </button>
+      <p className="text-xs text-gray-500">Alebo vyber den a cas:</p>
+      <div className="flex gap-1.5">
+        {days.map(day => (
+          <button key={day.index} onClick={() => setSelectedDay(selectedDay === day.index ? null : day.index)}
+            className={`flex-1 py-2 px-1 rounded-lg text-center transition-all border ${
+              selectedDay === day.index
+                ? "bg-blue-600/20 border-blue-500/50 shadow-lg shadow-blue-500/10"
+                : "bg-gray-800/50 border-gray-700/30 hover:bg-gray-700/50 hover:border-gray-600"
+            }`}>
+            <div className={`text-[10px] font-medium ${selectedDay === day.index ? "text-blue-300" : "text-gray-500"}`}>{day.dayName}</div>
+            <div className={`text-xs font-bold ${selectedDay === day.index ? "text-blue-200" : "text-gray-300"}`}>{day.dateStr}</div>
+            {day.availableTimes.length > 0 && (
+              <div className="flex justify-center mt-1"><span className={`w-1.5 h-1.5 rounded-full ${selectedDay === day.index ? "bg-blue-400" : "bg-emerald-500/60"}`} /></div>
+            )}
+          </button>
+        ))}
+      </div>
+      {selectedDay !== null && (
+        <div className="bg-gray-800/30 rounded-lg p-2 border border-gray-700/30">
+          {days[selectedDay].availableTimes.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {days[selectedDay].availableTimes.map(time => (
+                <button key={time} onClick={() => handleTimeClick(days[selectedDay], time)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-900/30 hover:bg-amber-800/40 text-amber-300 text-xs rounded-lg transition-colors border border-amber-700/30">
+                  <Clock size={10} /> {time}
+                  <span className="text-amber-500/60 text-[9px] ml-0.5">({days[selectedDay].score}%)</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 text-center py-1">Ziadne volne casy</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Post card component ──
 function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, onCancelSchedule, onAutoPost, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
   const [expanded, setExpanded] = useState(false);
@@ -133,9 +242,6 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const taken = scheduledTimes || [];
-  const timeSlot1 = getNextOptimalTime(0, taken);
-  const timeSlot2 = getNextOptimalTime(1, taken);
-  const timeSlot3 = getNextOptimalTime(2, taken);
 
   const handleSave = () => {
     onEdit(index, { caption: editCaption, hashtags: editHashtags });
@@ -312,30 +418,14 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
                     )}
                   </div>
 
-                  {/* 3 scheduling time options */}
+                  {/* 5-day scheduler */}
                   {post.status !== "scheduled" && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <button
-                          onClick={() => onAutoPost(index)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-medium rounded-lg transition-all shadow-lg shadow-emerald-600/20"
-                        >
-                          <Zap size={12} /> Auto-post v najlepšom čase
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 mb-1.5">Alebo naplánovať na:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {[timeSlot1, timeSlot2, timeSlot3].map((slot, si) => (
-                          <button
-                            key={si}
-                            onClick={() => onSchedule(index, slot)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-900/30 hover:bg-amber-800/40 text-amber-300 text-xs rounded-lg transition-colors border border-amber-700/30"
-                          >
-                            <Clock size={12} /> {slot.day} {slot.time}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <FiveDayScheduler
+                      post={post}
+                      scheduledTimes={taken}
+                      onSchedule={(slot) => onSchedule(index, slot)}
+                      onAutoPost={() => onAutoPost(index)}
+                    />
                   )}
                 </div>
               )}
@@ -683,13 +773,27 @@ export default function EvolviumDashboard() {
     } catch (e) {}
     return DEMO_POSTS;
   });
+  const [dbLoaded, setDbLoaded] = useState(false);
 
-  // Persist posts to localStorage on every change
+  // Load from Supabase on mount
   useEffect(() => {
-    try {
-      localStorage.setItem("evolvium_posts", JSON.stringify(posts));
-    } catch (e) {}
-  }, [posts]);
+    loadPostsFromSupabase().then(dbPosts => {
+      if (dbPosts && dbPosts.length > 0) {
+        setPosts(dbPosts);
+        console.log("Loaded", dbPosts.length, "posts from Supabase");
+      } else {
+        saveAllPostsToSupabase(posts);
+        console.log("Seeded Supabase with", posts.length, "posts");
+      }
+      setDbLoaded(true);
+    });
+  }, []);
+
+  // Persist to localStorage + Supabase
+  useEffect(() => {
+    try { localStorage.setItem("evolvium_posts", JSON.stringify(posts)); } catch (e) {}
+    if (dbLoaded) saveAllPostsToSupabase(posts);
+  }, [posts, dbLoaded]);
   const [filter, setFilter] = useState("all");
   const [showSettings, setShowSettings] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -704,40 +808,8 @@ export default function EvolviumDashboard() {
   useEffect(function() {
     try { localStorage.setItem("evolvium_config", JSON.stringify(config)); } catch (e) {}
   }, [config]);
-  // ── Auto-scheduler: check every 60s for due scheduled posts ──
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      let changed = false;
-      const updated = posts.map(p => {
-        if (p.status === "scheduled" && p.scheduled_iso) {
-          const scheduled = new Date(p.scheduled_iso);
-          if (scheduled <= now) {
-            // Time to post! Send via webhook
-            const igUrl = p.image_url && p.image_url.includes(".png")
-              ? p.image_url.replace("/upload/", "/upload/f_jpg/")
-              : p.image_url;
-            fetch(config.webhookUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "post_now",
-                row: p.row,
-                image_url: igUrl,
-                caption: p.caption,
-                hashtags: p.hashtags,
-              }),
-            }).catch(() => {});
-            changed = true;
-            return { ...p, status: "posted", posted_date: now.toLocaleDateString("sk-SK"), scheduled_iso: null };
-          }
-        }
-        return p;
-      });
-      if (changed) setPosts(updated);
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [posts, config.webhookUrl]);
+  // Auto-scheduler REMOVED — scheduling is handled by Make.com polling Supabase
+  // Posts with status "scheduled" + scheduled_iso will be picked up by Make.com automatically
 
 
 
@@ -833,27 +905,41 @@ export default function EvolviumDashboard() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // ── Post via Make.com webhook ──
+  // ── Post via Make.com webhook (immediate) or schedule (save to DB only) ──
   const postViaWebhook = async (index, scheduleTime = null) => {
     const post = posts[index];
+
+    // SCHEDULING: just save to Supabase — Make.com will pick it up
+    if (scheduleTime) {
+      const newPosts = [...posts];
+      newPosts[index] = {
+        ...post,
+        status: "scheduled",
+        scheduled_iso: scheduleTime.date.toISOString(),
+        posted_date: `Plan: ${scheduleTime.day} ${scheduleTime.time}`,
+      };
+      setPosts(newPosts);
+      showNotif(`Post #${post.row} naplanovany na ${scheduleTime.day} ${scheduleTime.time}`);
+      return;
+    }
+
+    // IMMEDIATE POST: send to Make.com webhook now
     if (!config.webhookUrl) {
       showNotif("Nastav Make.com Webhook URL v nastaveniach", "error");
       setShowSettings(true);
       return;
     }
     try {
-      // Instagram requires JPEG — convert PNG via Cloudinary f_jpg transformation
       let igImageUrl = post.image_url;
       if (igImageUrl && igImageUrl.includes(".png")) {
         igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/");
       }
       const payload = {
-        action: scheduleTime ? "schedule" : "post_now",
+        action: "post_now",
         row: post.row,
         image_url: igImageUrl,
         caption: post.caption,
         hashtags: post.hashtags,
-        schedule_time: scheduleTime ? scheduleTime.date.toISOString() : null,
       };
       const res = await fetch(config.webhookUrl, {
         method: "POST",
@@ -864,14 +950,14 @@ export default function EvolviumDashboard() {
       const newPosts = [...posts];
       newPosts[index] = {
         ...post,
-        status: scheduleTime ? "scheduled" : "posted",
-        scheduled_iso: scheduleTime ? scheduleTime.date.toISOString() : null,
-        posted_date: scheduleTime ? `Plán: ${scheduleTime.day} ${scheduleTime.time}` : new Date().toLocaleDateString("sk-SK"),
+        status: "posted",
+        scheduled_iso: null,
+        posted_date: new Date().toLocaleDateString("sk-SK"),
       };
       setPosts(newPosts);
-      showNotif(scheduleTime ? `Post #${post.row} naplánovaný na ${scheduleTime.day} ${scheduleTime.time}` : `Post #${post.row} odoslaný na Instagram!`);
+      showNotif(`Post #${post.row} odoslany na Instagram!`);
     } catch (err) {
-      showNotif(`Chyba pri odosielaní: ${err.message}`, "error");
+      showNotif(`Chyba pri odosielani: ${err.message}`, "error");
     }
   };
 
@@ -880,7 +966,7 @@ export default function EvolviumDashboard() {
     const newPosts = [...posts];
     newPosts[index] = { ...newPosts[index], ...changes };
     setPosts(newPosts);
-    showNotif("Caption uložený lokálne");
+    showNotif("Caption ulozeny");
   };
 
   // ── Cancel scheduled post → back to draft ──
@@ -1074,6 +1160,16 @@ export default function EvolviumDashboard() {
           {/* Right column — sidebar */}
           <div className="space-y-4">
             <OptimalTimeWidget />
+
+            {/* Database status */}
+            <div className="bg-gray-800/80 rounded-xl border border-gray-700/50 p-4">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${dbLoaded ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`} />
+                <span className="text-xs text-gray-400">
+                  {dbLoaded ? "Supabase pripojeny — data su v databaze" : "Nacitavam z databazy..."}
+                </span>
+              </div>
+            </div>
 
             {/* Quick info */}
             <div className="bg-gray-800/80 rounded-xl border border-gray-700/50 p-5">
