@@ -311,6 +311,12 @@ function PostCard({ post, index, onEdit, onPostNow, onSchedule, onCancelSchedule
                   {/* 3 scheduling time options */}
                   {post.status !== "scheduled" && (
                     <div>
+                      <button
+                        onClick={() => onSchedule(index, timeSlot1)}
+                        className="flex items-center gap-1.5 px-3 py-2 mb-2 w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-medium rounded-lg transition-all"
+                      >
+                        <Zap size={14} /> Auto-post (najlepší čas: {timeSlot1.day} {timeSlot1.time})
+                      </button>
                       <p className="text-xs text-gray-500 mb-1.5">Naplánovať na:</p>
                       <div className="flex flex-wrap gap-2">
                         {[timeSlot1, timeSlot2, timeSlot3].map((slot, si) => (
