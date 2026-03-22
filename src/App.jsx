@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, RefreshCw, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical } from "lucide-react";
+import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, RefreshCw, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical, Plus, Sparkles, Loader2, Package } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════
 // EVOLVIUM Social Media Dashboard
@@ -19,21 +19,20 @@ const OPTIMAL_TIMES = [
 
 const DAY_NAMES = ["Nedeľa", "Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota"];
 
-function getNextOptimalTime(skipSlots = 0) {
+function getNextOptimalTime() {
   const now = new Date();
   const currentDay = now.getDay();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
 
-  let skipped = 0;
-  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
     const dayIndex = (currentDay + dayOffset) % 7;
     const dayData = OPTIMAL_TIMES.find(d => d.day === DAY_NAMES[dayIndex]);
     if (!dayData) continue;
+
     for (const time of dayData.times) {
       const [h, m] = time.split(":").map(Number);
       if (dayOffset === 0 && (h < currentHour || (h === currentHour && m <= currentMinute))) continue;
-      if (skipped < skipSlots) { skipped++; continue; }
       const nextDate = new Date(now);
       nextDate.setDate(now.getDate() + dayOffset);
       nextDate.setHours(h, m, 0, 0);
@@ -89,6 +88,19 @@ function SettingsPanel({ config, onSave, onClose }) {
               V Make.com pridaj "Webhooks → Custom webhook" modul na začiatok scenára
             </p>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">Canva Webhook URL (Make.com)</label>
+            <input
+              type="text"
+              value={local.canvaWebhookUrl || ""}
+              onChange={e => setLocal({ ...local, canvaWebhookUrl: e.target.value })}
+              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              placeholder="https://hook.eu1.make.com/..."
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Druhý Make.com scenár: Webhook → Canva → Cloudinary → Custom webhook" modul na začiatok scenára
+            </p>
+          </div>
         </div>
 
         <div className="flex gap-3 mt-6">
@@ -108,14 +120,16 @@ function SettingsPanel({ config, onSave, onClose }) {
 }
 
 // ── Post card component ──
-function PostCard({ post, index, scheduleSlot, onEdit, onPostNow, onSchedule, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
+function PostCard({ post, index, onEdit, onPostNow, onSchedule, onCancelSchedule, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editCaption, setEditCaption] = useState(post.caption);
   const [editHashtags, setEditHashtags] = useState(post.hashtags);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const nextTime = getNextOptimalTime(scheduleSlot || 0);
+  const timeSlot1 = getNextOptimalTime(0);
+  const timeSlot2 = getNextOptimalTime(1);
+  const timeSlot3 = getNextOptimalTime(2);
 
   const handleSave = () => {
     onEdit(index, { caption: editCaption, hashtags: editHashtags });
@@ -137,7 +151,8 @@ function PostCard({ post, index, scheduleSlot, onEdit, onPostNow, onSchedule, on
         isDragging ? "opacity-40 scale-95 border-blue-500/50" :
         isDragOver ? "border-blue-400 shadow-lg shadow-blue-500/10 translate-y-[-2px]" :
         expanded ? "border-blue-500/50 shadow-lg shadow-blue-500/5" : "border-gray-700/50 hover:border-gray-600"
-      }`}>
+      }`}
+    >
       {/* Card header */}
       <div
         className="flex items-center gap-4 p-4 cursor-pointer select-none"
@@ -147,7 +162,7 @@ function PostCard({ post, index, scheduleSlot, onEdit, onPostNow, onSchedule, on
         <div
           className="flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400 transition-colors"
           onClick={(e) => e.stopPropagation()}
-          title="Presun post"
+          title="Presuň post"
         >
           <GripVertical size={18} />
         </div>
@@ -180,9 +195,6 @@ function PostCard({ post, index, scheduleSlot, onEdit, onPostNow, onSchedule, on
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-semibold text-white">Post #{post.row || index + 1}</span>
-            {post.status === "posted" && post.posted_date && (
-              <span className="text-xs text-emerald-400">📅 {post.posted_date}</span>
-            )}
             <span className={`text-xs ${typeColor}`}>{typeLabel}</span>
           </div>
           <p className="text-sm text-gray-400 truncate">{post.caption?.substring(0, 80) || "Bez textu"}...</p>
@@ -270,31 +282,73 @@ function PostCard({ post, index, scheduleSlot, onEdit, onPostNow, onSchedule, on
 
               {/* Action buttons */}
               {post.status !== "posted" && !editing && (
-                <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-700/50">
-                  <button
-                    onClick={() => setEditing(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded-lg transition-colors"
-                  >
-                    <Edit3 size={14} /> Upraviť
-                  </button>
-                  <button
-                    onClick={() => onSchedule(index, nextTime)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-600/80 hover:bg-amber-500 text-white text-sm rounded-lg transition-colors"
-                  >
-                    <Clock size={14} /> Naplánovať ({nextTime.day} {nextTime.time})
-                  </button>
-                  <button
-                    onClick={() => onPostNow(index)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white text-sm rounded-lg transition-colors shadow-lg shadow-pink-600/20"
-                  >
-                    <Send size={14} /> Postnúť teraz
-                  </button>
+                <div className="space-y-3 mt-4 pt-4 border-t border-gray-700/50">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setEditing(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded-lg transition-colors"
+                    >
+                      <Edit3 size={14} /> Upraviť
+                    </button>
+                    <button
+                      onClick={() => onPostNow(index)}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white text-sm rounded-lg transition-colors shadow-lg shadow-pink-600/20"
+                    >
+                      <Send size={14} /> Postnúť teraz
+                    </button>
+                    {post.status === "scheduled" && (
+                      <button
+                        onClick={() => onCancelSchedule(index)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-red-900/50 hover:bg-red-800/50 text-red-300 text-sm rounded-lg transition-colors border border-red-700/30"
+                      >
+                        <X size={14} /> Zrušiť plánovanie
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 3 scheduling time options */}
+                  {post.status !== "scheduled" && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1.5">Naplánovať na:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[timeSlot1, timeSlot2, timeSlot3].map((slot, si) => (
+                          <button
+                            key={si}
+                            onClick={() => onSchedule(index, slot)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-900/30 hover:bg-amber-800/40 text-amber-300 text-xs rounded-lg transition-colors border border-amber-700/30"
+                          >
+                            <Clock size={12} /> {slot.day} {slot.time}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {post.status === "posted" && post.posted_date && (
                 <div className="flex items-center gap-2 mt-3 text-sm text-emerald-400">
                   <Check size={14} /> Publikovaný {post.posted_date}
+                </div>
+              )}
+
+              {/* Quote text for Canva */}
+              {post.quote && (
+                <div className="mt-3 p-3 bg-purple-900/20 border border-purple-700/30 rounded-lg">
+                  <p className="text-xs text-purple-400 mb-1 font-medium">Citát pre Canva:</p>
+                  <p className="text-sm text-purple-200 italic">„{post.quote}"</p>
+                </div>
+              )}
+
+              {/* Canva status */}
+              {post.canva_status === "pending" && !post.image_url && (
+                <div className="flex items-center gap-2 mt-2 text-xs text-amber-400">
+                  <Package size={12} /> Čaká na schválenie a odoslanie do Canvy
+                </div>
+              )}
+              {post.canva_status === "generating" && (
+                <div className="flex items-center gap-2 mt-2 text-xs text-blue-400">
+                  <Loader2 size={12} className="animate-spin" /> Canva generuje dizajn...
                 </div>
               )}
             </div>
@@ -495,6 +549,111 @@ const DEMO_POSTS = [
   },
 ];
 
+
+// ── Pre-written quotes for batch generation ──
+const BATCH_QUOTES = [
+  {
+    quote: "Najväčšia revolúcia, akú môžeš zažiť, je revolúcia vlastného vedomia.",
+    caption: "Revolúcia neznačí prevrat vonku — znamená premenu vnútra.\nKaždý krát, keď si uvedomíš niečo nové o sebe, meníš celý svoj svet.",
+    hashtags: "#evolvium #revolucia #vedomie #premena #sebapoznanie"
+  },
+  {
+    quote: "Každá kríza je pozvánka pozrieť sa na seba z perspektívy, ktorú si doteraz odmietal vidieť.",
+    caption: "Krízy nie sú tresty. Sú to zrkadlá.\nKeď sa všetko rúca, máš šancu vidieť, čo si doteraz nechcel.",
+    hashtags: "#evolvium #kriza #perspektiva #rast #zrkadlo"
+  },
+  {
+    quote: "Čím viac sa snažíš kontrolovať život, tým viac ti uniká.",
+    caption: "Kontrola je ilúzia bezpečia.\nSkutočná sloboda začína tam, kde končí tvoja potreba mať všetko pod palcom.",
+    hashtags: "#evolvium #kontrola #sloboda #pustenie #dovera"
+  },
+  {
+    quote: "Neexistuje nič, čo by modernému človeku prinieslo viac benefitov ako zvýšenie úrovne vedomia.",
+    caption: "Investícia do vedomia nie je luxus — je to základ všetkého.\nLepšie vzťahy, lepšie rozhodnutia, hlbší pokoj.",
+    hashtags: "#evolvium #vedomie #investicia #benefity #rozvoj"
+  },
+  {
+    quote: "Nie sme stredom vesmíru. Nie je ním ani ľudská rasa. Nie je ním ani naša planéta.",
+    caption: "Pokora nie je slabosť — je to prvý krok k pochopeniu.\nKeď prestanéš byť stredom, začneš vidieť celok.",
+    hashtags: "#evolvium #pokora #vesmir #perspektiva #pochopenie"
+  },
+  {
+    quote: "Len čo si uvedomíme ilúziu separácie, aktivuje sa v nás hlboké spojenie s inými bytosťami.",
+    caption: "Oddelenosť je najväčšia ilúzia, v ktorej žijeme.\nV momente, keď ju prešahúš, cítiš spojenie, ktoré tu vždy bolo.",
+    hashtags: "#evolvium #spojenie #iluzia #jednota #vedomie"
+  },
+  {
+    quote: "V každom momente si človek môže vybrať, ako sa bude pozerať na svet.",
+    caption: "Nemôžeš zmeniť to, čo sa deje.\nAle vždy si môžeš vybrať, akými očami sa na to pozrieš.",
+    hashtags: "#evolvium #volba #perspektiva #sloboda #prítomnost"
+  },
+  {
+    quote: "Čo keby sme nechali ostatných žiť svoj život a starali sa viac o ten vlastný?",
+    caption: "Koľko energie míňaš súdením iných?\nTá istá energia by mohla ísť do tvojho vlastného rastu.",
+    hashtags: "#evolvium #sudenie #sloboda #focus #vlastnycesta"
+  },
+  {
+    quote: "Bezpodmienečne milovať neznamená, že si necháte robiť zle.",
+    caption: "Láska bez podmienok neznamená život bez hraníc.\nMôžeš milovať a zároveň chrániť seba.",
+    hashtags: "#evolvium #laska #hranice #sebalaska #zdravevztahy"
+  },
+  {
+    quote: "Peklo a nebo sú len malý kúsok od seba.",
+    caption: "Medzi utrpením a pokojom nie je priepasť.\nJe to jeden posun vedomia. Jedna voľba. Jeden nádych.",
+    hashtags: "#evolvium #peklo #nebo #vedomie #volba #pokoj"
+  },
+  {
+    quote: "Myslieť si, že viem, je najväčšia prekážka skutočného poznania.",
+    caption: "Ego hovori: „Už viem.“\nVerdomie šepá: „Ešte sa učím.“\nSkutočná múdrosť začína priznaním nevedomosti.",
+    hashtags: "#evolvium #mudrost #ego #poznanie #pokora"
+  },
+  {
+    quote: "Každá myšlienka, ktorú opakuješ, sa stáva súčasťou tvojej identity.",
+    caption: "Dávaj pozor na to, čo si hovoriš v hlave.\nTvoje myšlienky formujú, kým sa stávaš.",
+    hashtags: "#evolvium #myslienky #identita #uvedomenie #zmena"
+  },
+  {
+    quote: "Sloboda nie je robiť, čo chcem. Sloboda je nebyť otrokom toho, čo chcem.",
+    caption: "Skutočná sloboda nie je v možnostiach.\nJe v nezávislosti od vlastných túžob.",
+    hashtags: "#evolvium #sloboda #tuziby #nezavislost #vedomyzivot"
+  },
+  {
+    quote: "Keď pochopíš, že nič nie je trvalé, prestanúš sa báť a začneš žiť.",
+    caption: "Strach z pominutelnosti nás oberá o pritomnost.\nVšetko končí. A práve preto je to krásne.",
+    hashtags: "#evolvium #pomijivost #pritomnost #zivot #strach"
+  },
+  {
+    quote: "Tvoj najväčší učiteľ žije v tvojom vnútri. Stačí stišíť myseľ a počúvať.",
+    caption: "Všetky odpovede, ktoré hľadáš vonku, čakajú vnútra.\nTišina nie je prázdnota — je to priestor pre múdrosť.",
+    hashtags: "#evolvium #vnutro #tisina #mudrost #ucitel"
+  },
+  {
+    quote: "Ten, kto pozná seba, nepotrebuje súhlas sveta.",
+    caption: "Keď sa zakovíš v sebe, názory ostatných stratía váhu.\nSebavedomie nie je aroganica — je to vnútorný pokoj.",
+    hashtags: "#evolvium #sebapoznanie #sebavedomie #pokoj #vnutro"
+  },
+  {
+    quote: "Nemôžeš uzdravit to, čo si odmietaš priznať.",
+    caption: "Prvý krok k uzdraveniu nie je liečba.\nJe to čestné priznanie: „Nieco nie je v poriadku.“",
+    hashtags: "#evolvium #uzdravenie #cestnost #priznaníe #rast"
+  },
+  {
+    quote: "Život ťa netrápi. Trápi ťa tvoja interpretácia života.",
+    caption: "Udalosti sú neutrálne.\nTo, čo ťa bolí, je príbeh, ktorý si o nich povieš.",
+    hashtags: "#evolvium #interpretacia #mysel #udalosti #perspektiva"
+  },
+  {
+    quote: "Za každým strachom sa skrýva sloboda, po ktorej túžiš.",
+    caption: "Strach je dvere, nie stena.\nKeď cez ne prejdeš, začína život, o ktorom snívaš.",
+    hashtags: "#evolvium #strach #sloboda #odvaha #prekonanie"
+  },
+  {
+    quote: "Nemusíš sa zmeniť. Stačí sa prestáť pretvarovať.",
+    caption: "Autentičnosť nie je nieco, čo sa učíš.\nJe to to, čo zostáva, keď prestanú masky.",
+    hashtags: "#evolvium #autenticnost #masky #pravdivost #bytie"
+  },
+];
+
 // ═══════════════════════════════════════════════════════════════
 // MAIN DASHBOARD COMPONENT
 // ═══════════════════════════════════════════════════════════════
@@ -520,7 +679,105 @@ export default function EvolviumDashboard() {
   const [filter, setFilter] = useState("all");
   const [showSettings, setShowSettings] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [config, setConfig] = useState(function(){try{var s=localStorage.getItem("evolvium_config");if(s)return JSON.parse(s)}catch(e){}return{webhookUrl:"https://hook.eu1.make.com/4rgf5em9xy9dq7sxlgeeyl9ot2e1f41v"}}());useEffect(function(){try{localStorage.setItem("evolvium_config",JSON.stringify(config))}catch(e){}},[config]);
+  const [config, setConfig] = useState(() => {
+    try {
+      var saved = localStorage.getItem("evolvium_config");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { webhookUrl: "https://hook.eu1.make.com/4rgf5em9xy9dq7sxlgeeyl9ot2e1f41v" };
+  });
+
+  useEffect(function() {
+    try { localStorage.setItem("evolvium_config", JSON.stringify(config)); } catch (e) {}
+  }, [config]);
+
+
+  // ── Generate new batch of posts ──
+  const generateBatch = () => {
+    // Find which quotes are already used
+    const usedQuotes = new Set(posts.map(p => (p.quote || "").substring(0, 30)));
+    const available = BATCH_QUOTES.filter(q => !usedQuotes.has(q.quote.substring(0, 30)));
+
+    // Pick 10 (or fewer if not enough available)
+    const pick = available.length >= 10 ? available.slice(0, 10) : BATCH_QUOTES.slice(0, 10);
+    const maxRow = Math.max(...posts.map(p => p.row || 0), 0);
+
+    const newPosts = pick.map((q, i) => ({
+      row: maxRow + i + 1,
+      image_url: "",
+      caption: q.caption,
+      hashtags: q.hashtags,
+      quote: q.quote,
+      status: "draft",
+      canva_status: "pending", // pending → approved → generating → done
+    }));
+
+    setPosts([...posts, ...newPosts]);
+    showNotif("Vygenerovaných " + newPosts.length + " nových postov. Uprav texty a schváľ.");
+  };
+
+  // ── Send approved posts to Canva via Make.com ──
+  const sendToCanva = async () => {
+    const pending = posts.filter(p => p.canva_status === "pending" && !p.image_url);
+    if (pending.length === 0) {
+      showNotif("Nič na odoslanie — všetky posty už majú obrázky alebo nie sú schválené.", "error");
+      return;
+    }
+
+    const canvaWebhook = config.canvaWebhookUrl || "";
+    if (!canvaWebhook) {
+      showNotif("Nastav Canva Webhook URL v nastaveniach", "error");
+      setShowSettings(true);
+      return;
+    }
+
+    // Mark as generating
+    const newPosts = posts.map(p =>
+      p.canva_status === "pending" && !p.image_url
+        ? { ...p, canva_status: "generating" }
+        : p
+    );
+    setPosts(newPosts);
+
+    try {
+      const payload = {
+        action: "generate_canva_batch",
+        template_id: "DAGmg38UZO0",
+        cloud_name: "djh3zmzel",
+        posts: pending.map(p => ({
+          row: p.row,
+          quote: p.quote || p.caption.split("\n")[0],
+          public_id: "batch_post_" + p.row,
+        })),
+      };
+      const res = await fetch(canvaWebhook, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      showNotif("Odoslané do Canvy! Make.com spracúva " + pending.length + " postov...");
+    } catch (err) {
+      // Revert on error
+      setPosts(posts.map(p =>
+        p.canva_status === "generating" ? { ...p, canva_status: "pending" } : p
+      ));
+      showNotif("Chyba pri odosielaní: " + err.message, "error");
+    }
+  };
+
+  // ── Load images back from Cloudinary (after Make.com finishes) ──
+  const loadCanvaImages = () => {
+    const newPosts = posts.map(p => {
+      if (p.canva_status === "generating" || (p.canva_status === "pending" && !p.image_url)) {
+        const expectedUrl = "https://res.cloudinary.com/djh3zmzel/image/upload/batch_post_" + p.row + ".png";
+        return { ...p, image_url: expectedUrl, canva_status: "done" };
+      }
+      return p;
+    });
+    setPosts(newPosts);
+    showNotif("Obrázky načítané z Cloudinary");
+  };
 
   const showNotif = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -536,10 +793,15 @@ export default function EvolviumDashboard() {
       return;
     }
     try {
+      // Instagram requires JPEG — convert PNG via Cloudinary f_jpg transformation
+      let igImageUrl = post.image_url;
+      if (igImageUrl && igImageUrl.includes(".png")) {
+        igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/");
+      }
       const payload = {
         action: scheduleTime ? "schedule" : "post_now",
         row: post.row,
-        image_url: post.image_url,
+        image_url: igImageUrl,
         caption: post.caption,
         hashtags: post.hashtags,
         schedule_time: scheduleTime ? scheduleTime.date.toISOString() : null,
@@ -571,7 +833,15 @@ export default function EvolviumDashboard() {
     showNotif("Caption uložený lokálne");
   };
 
-  // ── Drag and drop state ──
+  // ── Cancel scheduled post → back to draft ──
+  const cancelSchedule = (index) => {
+    const newPosts = [...posts];
+    newPosts[index] = { ...newPosts[index], status: "draft", posted_date: "" };
+    setPosts(newPosts);
+    showNotif(`Post #${newPosts[index].row} vrátený do draftu`);
+  };
+
+  // ── Drag and drop reordering ──
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
@@ -638,11 +908,36 @@ export default function EvolviumDashboard() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={generateBatch}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-medium rounded-lg transition-all shadow-lg shadow-purple-600/20"
+            >
+              <Sparkles size={14} />
+              Vygenerovať batch
+            </button>
+            {posts.some(p => p.canva_status === "pending" && !p.image_url) && (
+              <button
+                onClick={sendToCanva}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <Package size={14} />
+                Odoslať do Canvy
+              </button>
+            )}
+            {posts.some(p => p.canva_status === "generating") && (
+              <button
+                onClick={loadCanvaImages}
+                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <Loader2 size={14} />
+                Načítať obrázky
+              </button>
+            )}
+            <button
               onClick={() => {
-                if (confirm("Resetovať všetky posty na pôvodné hodnoty?")) {
+                if (confirm("Resetovať všetky posty na pôvodné hodnoty? Stratíš všetky úpravy.")) {
                   setPosts(DEMO_POSTS);
                   localStorage.removeItem("evolvium_posts");
-                  showNotif("Posty resetované");
+                  showNotif("Posty resetované na pôvodné hodnoty");
                 }
               }}
               className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors border border-gray-700"
@@ -701,21 +996,20 @@ export default function EvolviumDashboard() {
               ) : (
                 filtered.map((post, i) => {
                   const realIndex = posts.indexOf(post);
-                  const scheduledBefore = posts.filter((p, pi) => pi < realIndex && p.status === "scheduled").length;
                   return (
                     <PostCard
                       key={post.row}
                       post={post}
                       index={realIndex}
-                      scheduleSlot={scheduledBefore}
                       onEdit={handleEdit}
                       onPostNow={(idx) => postViaWebhook(idx)}
                       onSchedule={(idx, time) => postViaWebhook(idx, time)}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                    isDragging={dragIndex === realIndex}
-                    isDragOver={dragOverIndex === realIndex}
+                      onCancelSchedule={cancelSchedule}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDragEnd={handleDragEnd}
+                      isDragging={dragIndex === realIndex}
+                      isDragOver={dragOverIndex === realIndex}
                     />
                   );
                 })
