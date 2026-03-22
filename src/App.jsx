@@ -520,12 +520,7 @@ export default function EvolviumDashboard() {
   const [filter, setFilter] = useState("all");
   const [showSettings, setShowSettings] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [config, setConfig] = useState({
-    sheetId: "1SIGMdzLpj3T2ei7htx_GN8BvW7PvUMAPDKZdnSzITeQ",
-    apiKey: "",
-    webhookUrl: "",
-    sheetName: "Sheet1",
-  });
+  const [config, setConfig] = useState(function(){try{var s=localStorage.getItem("evolvium_config");if(s)return JSON.parse(s)}catch(e){}return{webhookUrl:"https://hook.eu1.make.com/4rgf5em9xy9dq7sxlgeeyl9ot2e1f41v"}}());useEffect(function(){try{localStorage.setItem("evolvium_config",JSON.stringify(config))}catch(e){}},[config]);
 
   const showNotif = (msg, type = "success") => {
     setNotification({ msg, type });
