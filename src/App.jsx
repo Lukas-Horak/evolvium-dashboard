@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, RefreshCw, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════
@@ -75,30 +75,7 @@ function SettingsPanel({ config, onSave, onClose }) {
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">Google Sheets ID</label>
-            <input
-              type="text"
-              value={local.sheetId}
-              onChange={e => setLocal({ ...local, sheetId: e.target.value })}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              placeholder="1SIGMdzLpj3T2ei7htx_GN8BvW7PvUMAPDKZdnSzITeQ"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">Google API Key</label>
-            <input
-              type="password"
-              value={local.apiKey}
-              onChange={e => setLocal({ ...local, apiKey: e.target.value })}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              placeholder="AIza..."
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Vytvor na <a href="https://console.cloud.google.com/apis/credentials" target="_blank" className="text-blue-400 hover:underline">Google Cloud Console</a> → Credentials → API Key
-            </p>
-          </div>
-          <div>
+                    <div>
             <label className="block text-sm font-medium text-gray-300 mb-1.5">Make.com Webhook URL</label>
             <input
               type="text"
@@ -110,16 +87,6 @@ function SettingsPanel({ config, onSave, onClose }) {
             <p className="text-xs text-gray-500 mt-1">
               V Make.com pridaj "Webhooks → Custom webhook" modul na začiatok scenára
             </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">Sheet Name</label>
-            <input
-              type="text"
-              value={local.sheetName}
-              onChange={e => setLocal({ ...local, sheetName: e.target.value })}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              placeholder="Sheet1"
-            />
           </div>
         </div>
 
@@ -410,14 +377,15 @@ const DEMO_POSTS = [
     image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/1_i1tsmm.png",
     caption: `\u201ESkuto\u010Dn\u00E1 zmena neza\u010D\u00EDna v okol\u00ED \u2014 za\u010D\u00EDna v tebe.\u201C\n\nKa\u017Ed\u00FD de\u0148 m\u00E1\u0161 vo\u013Ebu: \u017Ei\u0165 pod\u013Ea star\u00FDch vzorcov, alebo sa posun\u00FA\u0165 o krok bli\u017E\u0161ie k sebe sam\u00E9mu.`,
     hashtags: "#evolvium #evoluciavedomia #sebareflexia #osobnyrast #vedomie",
-    status: "draft",
+    status: "posted",
+    posted_date: "21.3.2026",
   },
   {
     row: 3,
     image_url: "https://res.cloudinary.com/djh3zmzel/image/upload/2_zmj3p1.png",
     caption: `Kedy naposledy si sa zastavil a sp\u00FDtal sa s\u00E1m seba: \u201EKto vlastne som bez v\u0161etk\u00FDch rol\u00ED, ktor\u00E9 hr\u00E1m?\u201C`,
     hashtags: "#evolvium #ktosom #sebauvedomenie #otazky #vnutornysvet",
-    status: "draft",
+    status: "scheduled",
   },
   {
     row: 4,
@@ -531,10 +499,25 @@ const DEMO_POSTS = [
 // ═══════════════════════════════════════════════════════════════
 
 export default function EvolviumDashboard() {
-  const [posts, setPosts] = useState(DEMO_POSTS);
+  const [posts, setPosts] = useState(() => {
+    try {
+      const saved = localStorage.getItem("evolvium_posts");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEMO_POSTS;
+  });
+
+  // Persist posts to localStorage on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem("evolvium_posts", JSON.stringify(posts));
+    } catch (e) {}
+  }, [posts]);
   const [filter, setFilter] = useState("all");
   const [showSettings, setShowSettings] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [config, setConfig] = useState({
     sheetId: "1SIGMdzLpj3T2ei7htx_GN8BvW7PvUMAPDKZdnSzITeQ",
@@ -547,38 +530,6 @@ export default function EvolviumDashboard() {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 4000);
   };
-
-  // ── Fetch from Google Sheets ──
-  const fetchFromSheets = useCallback(async () => {
-    if (!config.apiKey) {
-      showNotif("Nastav Google API Key v nastaveniach", "error");
-      setShowSettings(true);
-      return;
-    }
-    setLoading(true);
-    try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.sheetId}/values/${config.sheetName}?key=${config.apiKey}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message);
-      const rows = data.values || [];
-      if (rows.length < 2) throw new Error("Sheet je prázdny");
-      const headers = rows[0];
-      const parsed = rows.slice(1).map((row, i) => ({
-        row: i + 2,
-        image_url: row[headers.indexOf("image_url")] || "",
-        caption: row[headers.indexOf("caption")] || "",
-        hashtags: row[headers.indexOf("hashtags")] || "",
-        status: row[headers.indexOf("status")] || "draft",
-        posted_date: row[headers.indexOf("posted_date")] || "",
-      }));
-      setPosts(parsed);
-      showNotif(`Načítaných ${parsed.length} postov z Google Sheets`);
-    } catch (err) {
-      showNotif(`Chyba: ${err.message}`, "error");
-    }
-    setLoading(false);
-  }, [config]);
 
   // ── Post via Make.com webhook ──
   const postViaWebhook = async (index, scheduleTime = null) => {
@@ -691,12 +642,17 @@ export default function EvolviumDashboard() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchFromSheets}
-              disabled={loading}
+              onClick={() => {
+                if (confirm("Resetovať všetky posty na pôvodné hodnoty?")) {
+                  setPosts(DEMO_POSTS);
+                  localStorage.removeItem("evolvium_posts");
+                  showNotif("Posty resetované");
+                }
+              }}
               className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors border border-gray-700"
             >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              {loading ? "Načítavam..." : "Obnoviť"}
+              <RefreshCw size={14} />
+              Reset
             </button>
             <button
               onClick={() => setShowSettings(true)}
@@ -799,19 +755,6 @@ export default function EvolviumDashboard() {
             </div>
 
             {/* Setup guide */}
-            {!config.apiKey && (
-              <div className="bg-amber-900/20 rounded-xl border border-amber-700/30 p-5">
-                <h3 className="text-sm font-semibold text-amber-300 flex items-center gap-2 mb-2">
-                  <AlertCircle size={16} /> Prvé nastavenie
-                </h3>
-                <ol className="text-sm text-amber-200/80 space-y-2 list-decimal list-inside">
-                  <li>Klikni na ⚙ Nastavenia vpravo hore</li>
-                  <li>Zadaj Google API Key (na čítanie sheetu)</li>
-                  <li>Zadaj Make.com Webhook URL (na postovanie)</li>
-                  <li>Klikni "Obnoviť" na načítanie postov</li>
-                </ol>
-              </div>
-            )}
           </div>
         </div>
       </main>
