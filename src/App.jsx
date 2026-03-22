@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, RefreshCw, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical, Plus, Sparkles, Loader2, Package } from "lucide-react";
+import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical, Plus, Sparkles, Loader2, Package } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════
 // EVOLVIUM Social Media Dashboard
@@ -19,12 +19,12 @@ const OPTIMAL_TIMES = [
 
 const DAY_NAMES = ["Nedeľa", "Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota"];
 
-function getNextOptimalTime(skipSlots) {
-  skipSlots = skipSlots || 0;
+function getNextOptimalTime(skipSlots = 0, takenTimes = []) {
   const now = new Date();
   const currentDay = now.getDay();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
+  let skipped = 0;
 
   for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
     const dayIndex = (currentDay + dayOffset) % 7;
@@ -34,10 +34,13 @@ function getNextOptimalTime(skipSlots) {
     for (const time of dayData.times) {
       const [h, m] = time.split(":").map(Number);
       if (dayOffset === 0 && (h < currentHour || (h === currentHour && m <= currentMinute))) continue;
-      if (skipSlots > 0) { skipSlots--; continue; }
+      // Skip already-taken times
       const nextDate = new Date(now);
       nextDate.setDate(now.getDate() + dayOffset);
       nextDate.setHours(h, m, 0, 0);
+      const timeKey = nextDate.toISOString();
+      if (takenTimes.includes(timeKey)) continue;
+      if (skipped < skipSlots) { skipped++; continue; }
       return { date: nextDate, score: dayData.score, day: dayData.day, time };
     }
   }
@@ -122,16 +125,17 @@ function SettingsPanel({ config, onSave, onClose }) {
 }
 
 // ── Post card component ──
-function PostCard({ post, index, onEdit, onPostNow, onSchedule, onCancelSchedule, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
+function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, onCancelSchedule, onAutoPost, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editCaption, setEditCaption] = useState(post.caption);
   const [editHashtags, setEditHashtags] = useState(post.hashtags);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const timeSlot1 = getNextOptimalTime(0);
-  const timeSlot2 = getNextOptimalTime(1);
-  const timeSlot3 = getNextOptimalTime(2);
+  const taken = scheduledTimes || [];
+  const timeSlot1 = getNextOptimalTime(0, taken);
+  const timeSlot2 = getNextOptimalTime(1, taken);
+  const timeSlot3 = getNextOptimalTime(2, taken);
 
   const handleSave = () => {
     onEdit(index, { caption: editCaption, hashtags: editHashtags });
@@ -311,19 +315,15 @@ function PostCard({ post, index, onEdit, onPostNow, onSchedule, onCancelSchedule
                   {/* 3 scheduling time options */}
                   {post.status !== "scheduled" && (
                     <div>
-                      <button
-                        onClick={() => onSchedule(index, timeSlot1)}
-                        className="flex items-center gap-1.5 px-3 py-2 mb-2 w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-medium rounded-lg transition-all"
-                      >
-                        <Zap size={14} /> Auto-post (najlepší čas: {timeSlot1.day} {timeSlot1.time})
-                      </button>
-                      <button
-                        onClick={() => onSchedule(index, timeSlot1)}
-                        className="flex items-center gap-1.5 px-3 py-2 mb-2 w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-medium rounded-lg transition-all"
-                      >
-                        <Zap size={14} /> Auto-post (najlepší čas: {timeSlot1.day} {timeSlot1.time})
-                      </button>
-                      <p className="text-xs text-gray-500 mb-1.5">Naplánovať na:</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <button
+                          onClick={() => onAutoPost(index)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-medium rounded-lg transition-all shadow-lg shadow-emerald-600/20"
+                        >
+                          <Zap size={12} /> Auto-post v najlepšom čase
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-1.5">Alebo naplánovať na:</p>
                       <div className="flex flex-wrap gap-2">
                         {[timeSlot1, timeSlot2, timeSlot3].map((slot, si) => (
                           <button
@@ -704,6 +704,41 @@ export default function EvolviumDashboard() {
   useEffect(function() {
     try { localStorage.setItem("evolvium_config", JSON.stringify(config)); } catch (e) {}
   }, [config]);
+  // ── Auto-scheduler: check every 60s for due scheduled posts ──
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      let changed = false;
+      const updated = posts.map(p => {
+        if (p.status === "scheduled" && p.scheduled_iso) {
+          const scheduled = new Date(p.scheduled_iso);
+          if (scheduled <= now) {
+            // Time to post! Send via webhook
+            const igUrl = p.image_url && p.image_url.includes(".png")
+              ? p.image_url.replace("/upload/", "/upload/f_jpg/")
+              : p.image_url;
+            fetch(config.webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "post_now",
+                row: p.row,
+                image_url: igUrl,
+                caption: p.caption,
+                hashtags: p.hashtags,
+              }),
+            }).catch(() => {});
+            changed = true;
+            return { ...p, status: "posted", posted_date: now.toLocaleDateString("sk-SK"), scheduled_iso: null };
+          }
+        }
+        return p;
+      });
+      if (changed) setPosts(updated);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [posts, config.webhookUrl]);
+
 
 
   // ── Generate new batch of posts ──
@@ -830,6 +865,7 @@ export default function EvolviumDashboard() {
       newPosts[index] = {
         ...post,
         status: scheduleTime ? "scheduled" : "posted",
+        scheduled_iso: scheduleTime ? scheduleTime.date.toISOString() : null,
         posted_date: scheduleTime ? `Plán: ${scheduleTime.day} ${scheduleTime.time}` : new Date().toLocaleDateString("sk-SK"),
       };
       setPosts(newPosts);
@@ -880,8 +916,19 @@ export default function EvolviumDashboard() {
     setDragOverIndex(null);
   };
 
+
+  // ── Auto-sort: posted first, then scheduled (by time), then drafts ──
+  const sortedPosts = [...posts].sort((a, b) => {
+    const order = { posted: 0, scheduled: 1, draft: 2, failed: 3 };
+    const sa = order[a.status] ?? 2;
+    const sb = order[b.status] ?? 2;
+    if (sa !== sb) return sa - sb;
+    // Within same status, sort by scheduled time or row
+    if (a.scheduled_iso && b.scheduled_iso) return new Date(a.scheduled_iso) - new Date(b.scheduled_iso);
+    return (a.row || 0) - (b.row || 0);
+  });
   // ── Filter posts ──
-  const filtered = posts.filter(p => {
+  const filtered = sortedPosts.filter(p => {
     if (filter === "all") return true;
     if (filter === "draft") return !p.status || p.status === "draft";
     return p.status === filter;
@@ -947,19 +994,6 @@ export default function EvolviumDashboard() {
               </button>
             )}
             <button
-              onClick={() => {
-                if (confirm("Resetovať všetky posty na pôvodné hodnoty? Stratíš všetky úpravy.")) {
-                  setPosts(DEMO_POSTS);
-                  localStorage.removeItem("evolvium_posts");
-                  showNotif("Posty resetované na pôvodné hodnoty");
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors border border-gray-700"
-            >
-              <RefreshCw size={14} />
-              Reset
-            </button>
-            <button
               onClick={() => setShowSettings(true)}
               className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg transition-colors border border-gray-700"
             >
@@ -1010,15 +1044,21 @@ export default function EvolviumDashboard() {
               ) : (
                 filtered.map((post, i) => {
                   const realIndex = posts.indexOf(post);
+                  // Collect scheduled times to prevent duplicates
+                  const scheduledTimes = posts
+                    .filter(p => p.status === "scheduled" && p.scheduled_iso)
+                    .map(p => p.scheduled_iso);
                   return (
                     <PostCard
                       key={post.row}
                       post={post}
                       index={realIndex}
+                      scheduledTimes={scheduledTimes}
                       onEdit={handleEdit}
                       onPostNow={(idx) => postViaWebhook(idx)}
                       onSchedule={(idx, time) => postViaWebhook(idx, time)}
                       onCancelSchedule={cancelSchedule}
+                      onAutoPost={(idx) => { const best = getNextOptimalTime(0, scheduledTimes); postViaWebhook(idx, best); }}
                       onDragStart={handleDragStart}
                       onDragOver={handleDragOver}
                       onDragEnd={handleDragEnd}
