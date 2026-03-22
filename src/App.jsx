@@ -19,20 +19,21 @@ const OPTIMAL_TIMES = [
 
 const DAY_NAMES = ["Nedeľa", "Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota"];
 
-function getNextOptimalTime() {
+function getNextOptimalTime(skipSlots = 0) {
   const now = new Date();
   const currentDay = now.getDay();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
 
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+  let skipped = 0;
+  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
     const dayIndex = (currentDay + dayOffset) % 7;
     const dayData = OPTIMAL_TIMES.find(d => d.day === DAY_NAMES[dayIndex]);
     if (!dayData) continue;
-
     for (const time of dayData.times) {
       const [h, m] = time.split(":").map(Number);
       if (dayOffset === 0 && (h < currentHour || (h === currentHour && m <= currentMinute))) continue;
+      if (skipped < skipSlots) { skipped++; continue; }
       const nextDate = new Date(now);
       nextDate.setDate(now.getDate() + dayOffset);
       nextDate.setHours(h, m, 0, 0);
@@ -107,14 +108,14 @@ function SettingsPanel({ config, onSave, onClose }) {
 }
 
 // ── Post card component ──
-function PostCard({ post, index, onEdit, onPostNow, onSchedule, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
+function PostCard({ post, index, scheduleSlot, onEdit, onPostNow, onSchedule, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editCaption, setEditCaption] = useState(post.caption);
   const [editHashtags, setEditHashtags] = useState(post.hashtags);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const nextTime = getNextOptimalTime();
+  const nextTime = getNextOptimalTime(scheduleSlot || 0);
 
   const handleSave = () => {
     onEdit(index, { caption: editCaption, hashtags: editHashtags });
@@ -705,11 +706,13 @@ export default function EvolviumDashboard() {
               ) : (
                 filtered.map((post, i) => {
                   const realIndex = posts.indexOf(post);
+                  const scheduledBefore = posts.filter((p, pi) => pi < realIndex && p.status === "scheduled").length;
                   return (
                     <PostCard
                       key={post.row}
                       post={post}
                       index={realIndex}
+                      scheduleSlot={scheduledBefore}
                       onEdit={handleEdit}
                       onPostNow={(idx) => postViaWebhook(idx)}
                       onSchedule={(idx, time) => postViaWebhook(idx, time)}
