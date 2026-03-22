@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, RefreshCw, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save } from "lucide-react";
+import { Calendar, Clock, Send, Edit3, Check, X, Eye, Settings, RefreshCw, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════
 // EVOLVIUM Social Media Dashboard
@@ -140,7 +140,7 @@ function SettingsPanel({ config, onSave, onClose }) {
 }
 
 // ── Post card component ──
-function PostCard({ post, index, onEdit, onPostNow, onSchedule }) {
+function PostCard({ post, index, onEdit, onPostNow, onSchedule, onDragStart, onDragOver, onDragEnd, isDragging, isDragOver }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editCaption, setEditCaption] = useState(post.caption);
@@ -159,14 +159,31 @@ function PostCard({ post, index, onEdit, onPostNow, onSchedule }) {
   const typeColor = isPhoto ? "text-purple-400" : "text-blue-400";
 
   return (
-    <div className={`bg-gray-800/80 rounded-xl border transition-all duration-200 ${
-      expanded ? "border-blue-500/50 shadow-lg shadow-blue-500/5" : "border-gray-700/50 hover:border-gray-600"
-    }`}>
+    <div
+      draggable
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart?.(index); }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; onDragOver?.(index); }}
+      onDrop={(e) => { e.preventDefault(); onDragEnd?.(); }}
+      onDragEnd={() => onDragEnd?.()}
+      className={`bg-gray-800/80 rounded-xl border transition-all duration-200 ${
+        isDragging ? "opacity-40 scale-95 border-blue-500/50" :
+        isDragOver ? "border-blue-400 shadow-lg shadow-blue-500/10 translate-y-[-2px]" :
+        expanded ? "border-blue-500/50 shadow-lg shadow-blue-500/5" : "border-gray-700/50 hover:border-gray-600"
+      }`}>
       {/* Card header */}
       <div
         className="flex items-center gap-4 p-4 cursor-pointer select-none"
         onClick={() => setExpanded(!expanded)}
       >
+        {/* Drag handle */}
+        <div
+          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+          title="Presun post"
+        >
+          <GripVertical size={18} />
+        </div>
+
         {/* Thumbnail */}
         <div className="w-16 h-20 rounded-lg overflow-hidden bg-gray-900 flex-shrink-0 relative">
           {post.image_url && !imgError ? (
@@ -195,6 +212,9 @@ function PostCard({ post, index, onEdit, onPostNow, onSchedule }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-semibold text-white">Post #{post.row || index + 1}</span>
+            {post.status === "posted" && post.posted_date && (
+              <span className="text-xs text-emerald-400">📅 {post.posted_date}</span>
+            )}
             <span className={`text-xs ${typeColor}`}>{typeLabel}</span>
           </div>
           <p className="text-sm text-gray-400 truncate">{post.caption?.substring(0, 80) || "Bez textu"}...</p>
@@ -604,6 +624,31 @@ export default function EvolviumDashboard() {
     showNotif("Caption uložený lokálne");
   };
 
+  // ── Drag and drop state ──
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
+  const handleDragStart = (index) => {
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (index) => {
+    if (dragIndex === null || dragIndex === index) return;
+    setDragOverIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
+      const newPosts = [...posts];
+      const [moved] = newPosts.splice(dragIndex, 1);
+      newPosts.splice(dragOverIndex, 0, moved);
+      setPosts(newPosts);
+      showNotif(`Post presunutý na pozíciu ${dragOverIndex + 1}`);
+    }
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
   // ── Filter posts ──
   const filtered = posts.filter(p => {
     if (filter === "all") return true;
@@ -712,6 +757,11 @@ export default function EvolviumDashboard() {
                       onEdit={handleEdit}
                       onPostNow={(idx) => postViaWebhook(idx)}
                       onSchedule={(idx, time) => postViaWebhook(idx, time)}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragEnd={handleDragEnd}
+                    isDragging={dragIndex === realIndex}
+                    isDragOver={dragOverIndex === realIndex}
                     />
                   );
                 })
