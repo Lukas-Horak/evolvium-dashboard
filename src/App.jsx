@@ -370,7 +370,6 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
             <div className="flex-1 min-w-0">
               {editing ? (
                 <div className="space-y-3">
-                  {/* Post type toggle */}
                   <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">Typ obsahu</label>
                     <div className="flex gap-2">
@@ -380,9 +379,8 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
                   </div>
                   {editPostType === "reel" && (<>
                     <div>
-                      <label className="block text-xs font-medium text-pink-400 mb-1 flex items-center gap-1"><Mic size={12} /> Text pre voiceover (ElevenLabs)</label>
-                      <textarea value={editReelText} onChange={e => setEditReelText(e.target.value)} className="w-full bg-gray-900 border border-pink-700/50 rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" rows={4} placeholder="Napíš text, ktorý sa nahovorí AI hlasom (James V3)..." />
-                      <p className="text-xs text-gray-500 mt-1">{editReelText?.length || 0} znakov — ElevenLabs V3 James</p>
+                      <label className="block text-xs font-medium text-pink-400 mb-1 flex items-center gap-1"><Mic size={12} /> Text pre voiceover</label>
+                      <textarea value={editReelText} onChange={e => setEditReelText(e.target.value)} className="w-full bg-gray-900 border border-pink-700/50 rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" rows={4} placeholder="Text pre AI hlas (James V3)..." />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-pink-400 mb-1 flex items-center gap-1"><Play size={12} /> Video pozadie URL</label>
@@ -476,9 +474,8 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
 
               {isReel && post.reel_text && (
                 <div className="mt-3 p-3 bg-pink-900/20 border border-pink-700/30 rounded-lg">
-                  <p className="text-xs text-pink-400 mb-1 font-medium flex items-center gap-1"><Mic size={12} /> Voiceover text (James V3):</p>
-                  <p className="text-sm text-pink-200 italic">„{post.reel_text}"</p>
-                  {post.video_url && <a href={post.video_url} target="_blank" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 mt-2"><Play size={12} /> Video pozadie</a>}
+                  <p className="text-xs text-pink-400 mb-1 font-medium flex items-center gap-1"><Mic size={12} /> Voiceover (James V3):</p>
+                  <p className="text-sm text-pink-200 italic">{post.reel_text}</p>
                 </div>
               )}
               {/* Quote text for Canva */}
@@ -851,10 +848,38 @@ export default function EvolviumDashboard() {
   });
 
   useEffect(function() {
-// ── Client-side auto-scheduler REMOVED (2026-03-24) ──
-  // Reason: Caused 3x duplicate posts on IG.
-  // Scheduling now handled by Make.com Scenario 2 "Integration HTTP"
-  // "Post Now" button still works via webhook (Scenario 1).
+    try { localStorage.setItem("evolvium_config", JSON.stringify(config)); } catch (e) {}
+  }, [config]);
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
+  const configRef = useRef(config);
+  configRef.current = config;
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const now = new Date();
+      const cp = postsRef.current;
+      const cfg = configRef.current;
+      if (!cfg.webhookUrl) return;
+      for (let i = 0; i < cp.length; i++) {
+        const p = cp[i];
+        if (p.status !== "scheduled" || !p.scheduled_iso || !p.image_url) continue;
+        if (new Date(p.scheduled_iso) > now) continue;
+        try {
+          let u = p.image_url;
+          if (u.includes(".png")) u = u.replace("/upload/", "/upload/f_jpg/");
+          const res = await fetch(cfg.webhookUrl, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({action:"post_now",row:p.row,image_url:u,caption:p.caption,hashtags:p.hashtags}) });
+          if (!res.ok) throw new Error("HTTP "+res.status);
+          const np = [...postsRef.current];
+          np[i] = {...np[i], status:"posted", scheduled_iso:null, posted_date:new Date().toLocaleDateString("sk-SK")};
+          setPosts(np);
+          showNotif("Auto-post: Post #"+p.row+" odoslany!");
+          break;
+        } catch(e) { showNotif("Auto-post chyba: "+e.message,"error"); }
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
 
 
   // ── Generate new batch of posts ──
@@ -967,41 +992,41 @@ export default function EvolviumDashboard() {
       return;
     }
 
-    // IMMEDIATE POST
-    const isReelPost = post.post_type === "reel";
-    const targetWebhook = isReelPost ? (config.reelsWebhookUrl || config.webhookUrl) : config.webhookUrl;
-
-    if (!targetWebhook) {
-      showNotif(isReelPost ? "Nastav Reels Webhook URL v nastaveniach" : "Nastav Make.com Webhook URL v nastaveniach", "error");
+    // IMMEDIATE POST: send to Make.com webhook now
+    if (!config.webhookUrl) {
+      showNotif("Nastav Make.com Webhook URL v nastaveniach", "error");
       setShowSettings(true);
       return;
     }
-
-    if (isReelPost) {
-      if (!post.reel_text) { showNotif(`Reel #${post.row} nemá voiceover text`, "error"); return; }
-      if (!post.video_url) { showNotif(`Reel #${post.row} nemá video pozadie URL`, "error"); return; }
-    } else if (!post.image_url) {
-      showNotif(`Post #${post.row} nemá obrázok — najprv pridaj image_url`, "error");
+    if (!post.image_url) {
+      showNotif(`Post #${post.row} nema obrazok`, "error");
       return;
     }
-
     try {
-      let payload;
-      if (isReelPost) {
-        payload = { action: "create_reel", row: post.row, reel_text: post.reel_text, video_url: post.video_url, caption: post.caption, hashtags: post.hashtags };
-      } else {
-        let igImageUrl = post.image_url;
-        if (igImageUrl && igImageUrl.includes(".png")) { igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/"); }
-        payload = { action: "post_now", row: post.row, image_url: igImageUrl, caption: post.caption, hashtags: post.hashtags };
+      let igImageUrl = post.image_url;
+      if (igImageUrl && igImageUrl.includes(".png")) {
+        igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/");
       }
-      const res = await fetch(targetWebhook, {
+      const payload = {
+        action: "post_now",
+        row: post.row,
+        image_url: igImageUrl,
+        caption: post.caption,
+        hashtags: post.hashtags,
+      };
+      const res = await fetch(config.webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const newPosts = [...posts];
-      newPosts[index] = { ...post, status: "posted", scheduled_iso: null, posted_date: new Date().toLocaleDateString("sk-SK") };
+      newPosts[index] = {
+        ...post,
+        status: "posted",
+        scheduled_iso: null,
+        posted_date: new Date().toLocaleDateString("sk-SK"),
+      };
       setPosts(newPosts);
       showNotif(`Post #${post.row} odoslany na Instagram!`);
     } catch (err) {
