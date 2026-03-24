@@ -970,31 +970,28 @@ export default function EvolviumDashboard() {
     // IMMEDIATE POST
     const isReelPost = post.post_type === "reel";
     const targetWebhook = isReelPost ? (config.reelsWebhookUrl || config.webhookUrl) : config.webhookUrl;
+
     if (!targetWebhook) {
-      showNotif(isReelPost ? "Nastav Reels Webhook URL v nastaveniach" : "Nastav Webhook URL v nastaveniach", "error");
+      showNotif(isReelPost ? "Nastav Reels Webhook URL v nastaveniach" : "Nastav Make.com Webhook URL v nastaveniach", "error");
       setShowSettings(true);
       return;
     }
-    if (isReelPost && !post.reel_text) { showNotif(`Reel #${post.row} nemá voiceover text`, "error"); return; }
-    if (isReelPost && !post.video_url) { showNotif(`Reel #${post.row} nemá video URL`, "error"); return; }
-    if (!isReelPost && !config.webhookUrl) {
-      showNotif("Nastav Make.com Webhook URL v nastaveniach", "error");
-      setShowSettings(true);
+
+    if (isReelPost) {
+      if (!post.reel_text) { showNotif(`Reel #${post.row} nemá voiceover text`, "error"); return; }
+      if (!post.video_url) { showNotif(`Reel #${post.row} nemá video pozadie URL`, "error"); return; }
+    } else if (!post.image_url) {
+      showNotif(`Post #${post.row} nemá obrázok — najprv pridaj image_url`, "error");
       return;
     }
-    if (!post.image_url) {
-      showNotif(`Post #${post.row} nema obrazok`, "error");
-      return;
-    }
+
     try {
-      let igImageUrl = post.image_url;
-      if (igImageUrl && igImageUrl.includes(".png")) {
-        igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/");
-      }
       let payload;
       if (isReelPost) {
         payload = { action: "create_reel", row: post.row, reel_text: post.reel_text, video_url: post.video_url, caption: post.caption, hashtags: post.hashtags };
       } else {
+        let igImageUrl = post.image_url;
+        if (igImageUrl && igImageUrl.includes(".png")) { igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/"); }
         payload = { action: "post_now", row: post.row, image_url: igImageUrl, caption: post.caption, hashtags: post.hashtags };
       }
       const res = await fetch(targetWebhook, {
@@ -1004,12 +1001,7 @@ export default function EvolviumDashboard() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const newPosts = [...posts];
-      newPosts[index] = {
-        ...post,
-        status: "posted",
-        scheduled_iso: null,
-        posted_date: new Date().toLocaleDateString("sk-SK"),
-      };
+      newPosts[index] = { ...post, status: "posted", scheduled_iso: null, posted_date: new Date().toLocaleDateString("sk-SK") };
       setPosts(newPosts);
       showNotif(`Post #${post.row} odoslany na Instagram!`);
     } catch (err) {
