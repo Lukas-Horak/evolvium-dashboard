@@ -806,38 +806,10 @@ export default function EvolviumDashboard() {
   });
 
   useEffect(function() {
-    try { localStorage.setItem("evolvium_config", JSON.stringify(config)); } catch (e) {}
-  }, [config]);
-  const postsRef = useRef(posts);
-  postsRef.current = posts;
-  const configRef = useRef(config);
-  configRef.current = config;
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const now = new Date();
-      const cp = postsRef.current;
-      const cfg = configRef.current;
-      if (!cfg.webhookUrl) return;
-      for (let i = 0; i < cp.length; i++) {
-        const p = cp[i];
-        if (p.status !== "scheduled" || !p.scheduled_iso || !p.image_url) continue;
-        if (new Date(p.scheduled_iso) > now) continue;
-        try {
-          let u = p.image_url;
-          if (u.includes(".png")) u = u.replace("/upload/", "/upload/f_jpg/");
-          const res = await fetch(cfg.webhookUrl, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({action:"post_now",row:p.row,image_url:u,caption:p.caption,hashtags:p.hashtags}) });
-          if (!res.ok) throw new Error("HTTP "+res.status);
-          const np = [...postsRef.current];
-          np[i] = {...np[i], status:"posted", scheduled_iso:null, posted_date:new Date().toLocaleDateString("sk-SK")};
-          setPosts(np);
-          showNotif("Auto-post: Post #"+p.row+" odoslany!");
-          break;
-        } catch(e) { showNotif("Auto-post chyba: "+e.message,"error"); }
-      }
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
+// ── Client-side auto-scheduler REMOVED (2026-03-24) ──
+  // Reason: Caused 3x duplicate posts on IG.
+  // Scheduling now handled by Make.com Scenario 2 "Integration HTTP"
+  // "Post Now" button still works via webhook (Scenario 1).
 
 
   // ── Generate new batch of posts ──
