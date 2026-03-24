@@ -992,29 +992,30 @@ export default function EvolviumDashboard() {
       return;
     }
 
-    // IMMEDIATE POST: send to Make.com webhook now
-    if (!config.webhookUrl) {
-      showNotif("Nastav Make.com Webhook URL v nastaveniach", "error");
+    // IMMEDIATE POST
+    const isReelPost = post.post_type === "reel";
+    const targetWebhook = isReelPost ? (config.reelsWebhookUrl || config.webhookUrl) : config.webhookUrl;
+    if (!targetWebhook) {
+      showNotif(isReelPost ? "Nastav Reels Webhook URL" : "Nastav Webhook URL", "error");
       setShowSettings(true);
       return;
     }
-    if (!post.image_url) {
-      showNotif(`Post #${post.row} nema obrazok`, "error");
+    if (isReelPost && !post.reel_text) { showNotif("Reel #" + post.row + " nema voiceover text", "error"); return; }
+    if (isReelPost && !post.video_url) { showNotif("Reel #" + post.row + " nema video URL", "error"); return; }
+    if (!isReelPost && !post.image_url) {
+      showNotif("Post #" + post.row + " nema obrazok", "error");
       return;
     }
     try {
-      let igImageUrl = post.image_url;
-      if (igImageUrl && igImageUrl.includes(".png")) {
-        igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/");
+      let payload;
+      if (isReelPost) {
+        payload = { action: "create_reel", row: post.row, reel_text: post.reel_text, video_url: post.video_url, caption: post.caption, hashtags: post.hashtags };
+      } else {
+        let igImageUrl = post.image_url;
+        if (igImageUrl && igImageUrl.includes(".png")) { igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/"); }
+        payload = { action: "post_now", row: post.row, image_url: igImageUrl, caption: post.caption, hashtags: post.hashtags };
       }
-      const payload = {
-        action: "post_now",
-        row: post.row,
-        image_url: igImageUrl,
-        caption: post.caption,
-        hashtags: post.hashtags,
-      };
-      const res = await fetch(config.webhookUrl, {
+      const res = await fetch(targetWebhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
