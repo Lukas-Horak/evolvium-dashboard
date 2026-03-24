@@ -967,8 +967,17 @@ export default function EvolviumDashboard() {
       return;
     }
 
-    // IMMEDIATE POST: send to Make.com webhook now
-    if (!config.webhookUrl) {
+    // IMMEDIATE POST
+    const isReelPost = post.post_type === "reel";
+    const targetWebhook = isReelPost ? (config.reelsWebhookUrl || config.webhookUrl) : config.webhookUrl;
+    if (!targetWebhook) {
+      showNotif(isReelPost ? "Nastav Reels Webhook URL v nastaveniach" : "Nastav Webhook URL v nastaveniach", "error");
+      setShowSettings(true);
+      return;
+    }
+    if (isReelPost && !post.reel_text) { showNotif(`Reel #${post.row} nemá voiceover text`, "error"); return; }
+    if (isReelPost && !post.video_url) { showNotif(`Reel #${post.row} nemá video URL`, "error"); return; }
+    if (!isReelPost && !config.webhookUrl) {
       showNotif("Nastav Make.com Webhook URL v nastaveniach", "error");
       setShowSettings(true);
       return;
