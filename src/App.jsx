@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Calendar, CalendarDays, Clock, Send, Edit3, Check, X, Eye, Settings, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical, Plus, Sparkles, Loader2, Package } from "lucide-react";
+import { Calendar, CalendarDays, Clock, Send, Edit3, Check, X, Eye, Settings, Zap, TrendingUp, Image, Hash, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, ExternalLink, Save, GripVertical, Plus, Sparkles, Loader2, Package, Film, Mic, Play } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Supabase client ──
@@ -18,6 +18,9 @@ async function loadPostsFromSupabase() {
       hashtags: row.hashtags || "", quote: row.quote || "", status: row.status || "draft",
       posted_date: row.posted_date || "", scheduled_iso: row.scheduled_iso || null,
       canva_status: row.canva_status || "",
+      post_type: row.post_type || "post",
+      reel_text: row.reel_text || "",
+      video_url: row.video_url || "",
     }));
   } catch (e) {
     console.warn("Supabase load failed:", e.message);
@@ -32,6 +35,9 @@ async function saveAllPostsToSupabase(posts) {
       hashtags: p.hashtags || "", quote: p.quote || "", status: p.status || "draft",
       posted_date: p.posted_date || "", scheduled_iso: p.scheduled_iso || null,
       canva_status: p.canva_status || "",
+      post_type: p.post_type || "post",
+      reel_text: p.reel_text || "",
+      video_url: p.video_url || "",
     }));
     const { error } = await supabase.from("posts").upsert(rows, { onConflict: "row_num" });
     if (error) throw error;
@@ -131,6 +137,11 @@ function SettingsPanel({ config, onSave, onClose }) {
             <p className="text-xs text-gray-500 mt-1">
               V Make.com pridaj "Webhooks → Custom webhook" modul na začiatok scenára
             </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">Reels Webhook URL (Make.com)</label>
+            <input type="text" value={local.reelsWebhookUrl || ""} onChange={e => setLocal({ ...local, reelsWebhookUrl: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" placeholder="https://hook.eu1.make.com/..." />
+            <p className="text-xs text-gray-500 mt-1">Make.com: Webhook → ElevenLabs → Creatomate → Instagram Reels</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1.5">Canva Webhook URL (Make.com)</label>
@@ -239,18 +250,22 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
   const [editing, setEditing] = useState(false);
   const [editCaption, setEditCaption] = useState(post.caption);
   const [editHashtags, setEditHashtags] = useState(post.hashtags);
+  const [editPostType, setEditPostType] = useState(post.post_type || "post");
+  const [editReelText, setEditReelText] = useState(post.reel_text || "");
+  const [editVideoUrl, setEditVideoUrl] = useState(post.video_url || "");
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const taken = scheduledTimes || [];
 
   const handleSave = () => {
-    onEdit(index, { caption: editCaption, hashtags: editHashtags });
+    onEdit(index, { caption: editCaption, hashtags: editHashtags, post_type: editPostType, reel_text: editReelText, video_url: editVideoUrl });
     setEditing(false);
   };
 
-  const isPhoto = post.image_url?.includes(".jpg");
-  const typeLabel = isPhoto ? "Foto knihy" : "Grafický post";
-  const typeColor = isPhoto ? "text-purple-400" : "text-blue-400";
+  const isReel = post.post_type === "reel";
+  const isPhoto = !isReel && post.image_url?.includes(".jpg");
+  const typeLabel = isReel ? "Reel" : isPhoto ? "Foto knihy" : "Grafický post";
+  const typeColor = isReel ? "text-pink-400" : isPhoto ? "text-purple-400" : "text-blue-400";
 
   return (
     <div
@@ -281,7 +296,11 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
 
         {/* Thumbnail */}
         <div className="w-16 h-20 rounded-lg overflow-hidden bg-gray-900 flex-shrink-0 relative">
-          {post.image_url && !imgError ? (
+          {isReel ? (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-900/40 to-purple-900/40">
+              <Film size={22} className="text-pink-400" />
+            </div>
+          ) : post.image_url && !imgError ? (
             <>
               {!imgLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -307,7 +326,7 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-semibold text-white">Post #{post.row || index + 1}</span>
-            <span className={`text-xs ${typeColor}`}>{typeLabel}</span>
+            <span className={`text-xs ${typeColor} flex items-center gap-1`}>{isReel && <Film size={12} />}{typeLabel}</span>
           </div>
           <p className="text-sm text-gray-400 truncate">{post.caption?.substring(0, 80) || "Bez textu"}...</p>
         </div>
@@ -351,6 +370,25 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
             <div className="flex-1 min-w-0">
               {editing ? (
                 <div className="space-y-3">
+                  {/* Post type toggle */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Typ obsahu</label>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditPostType("post")} className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${editPostType === "post" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-400 hover:bg-gray-600"}`}><Image size={14} /> Post</button>
+                      <button onClick={() => setEditPostType("reel")} className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${editPostType === "reel" ? "bg-pink-600 text-white" : "bg-gray-700 text-gray-400 hover:bg-gray-600"}`}><Film size={14} /> Reel</button>
+                    </div>
+                  </div>
+                  {editPostType === "reel" && (<>
+                    <div>
+                      <label className="block text-xs font-medium text-pink-400 mb-1 flex items-center gap-1"><Mic size={12} /> Text pre voiceover (ElevenLabs)</label>
+                      <textarea value={editReelText} onChange={e => setEditReelText(e.target.value)} className="w-full bg-gray-900 border border-pink-700/50 rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" rows={4} placeholder="Napíš text, ktorý sa nahovorí AI hlasom (James V3)..." />
+                      <p className="text-xs text-gray-500 mt-1">{editReelText?.length || 0} znakov — ElevenLabs V3 James</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-pink-400 mb-1 flex items-center gap-1"><Play size={12} /> Video pozadie URL</label>
+                      <input type="text" value={editVideoUrl} onChange={e => setEditVideoUrl(e.target.value)} className="w-full bg-gray-900 border border-pink-700/50 rounded-lg px-3 py-2 text-sm text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" placeholder="URL nature videa" />
+                    </div>
+                  </>)}
                   <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">Caption</label>
                     <textarea
@@ -406,7 +444,7 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
                       onClick={() => onPostNow(index)}
                       className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white text-sm rounded-lg transition-colors shadow-lg shadow-pink-600/20"
                     >
-                      <Send size={14} /> Postnúť teraz
+                      {isReel ? <><Film size={14} /> Vytvoriť Reel</> : <><Send size={14} /> Postnúť teraz</>}
                     </button>
                     {post.status === "scheduled" && (
                       <button
@@ -436,6 +474,13 @@ function PostCard({ post, index, scheduledTimes, onEdit, onPostNow, onSchedule, 
                 </div>
               )}
 
+              {isReel && post.reel_text && (
+                <div className="mt-3 p-3 bg-pink-900/20 border border-pink-700/30 rounded-lg">
+                  <p className="text-xs text-pink-400 mb-1 font-medium flex items-center gap-1"><Mic size={12} /> Voiceover text (James V3):</p>
+                  <p className="text-sm text-pink-200 italic">„{post.reel_text}"</p>
+                  {post.video_url && <a href={post.video_url} target="_blank" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 mt-2"><Play size={12} /> Video pozadie</a>}
+                </div>
+              )}
               {/* Quote text for Canva */}
               {post.quote && (
                 <div className="mt-3 p-3 bg-purple-900/20 border border-purple-700/30 rounded-lg">
@@ -937,14 +982,13 @@ export default function EvolviumDashboard() {
       if (igImageUrl && igImageUrl.includes(".png")) {
         igImageUrl = igImageUrl.replace("/upload/", "/upload/f_jpg/");
       }
-      const payload = {
-        action: "post_now",
-        row: post.row,
-        image_url: igImageUrl,
-        caption: post.caption,
-        hashtags: post.hashtags,
-      };
-      const res = await fetch(config.webhookUrl, {
+      let payload;
+      if (isReelPost) {
+        payload = { action: "create_reel", row: post.row, reel_text: post.reel_text, video_url: post.video_url, caption: post.caption, hashtags: post.hashtags };
+      } else {
+        payload = { action: "post_now", row: post.row, image_url: igImageUrl, caption: post.caption, hashtags: post.hashtags };
+      }
+      const res = await fetch(targetWebhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
